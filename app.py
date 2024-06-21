@@ -5,6 +5,8 @@ import seaborn as sns
 from matplotlib.patches import Rectangle
 import networkx as nx
 from mlxtend.frequent_patterns import apriori, association_rules
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
 
 # Configurar o estilo e a paleta de cores do Seaborn globalmente
 sns.set_palette("colorblind")
@@ -13,7 +15,12 @@ if 'counter' not in st.session_state:
     st.session_state.counter = 0
 
 def formatar_valor(valor):
-    valor_formatado = f"R${valor:,.2f}"
+    valor_formatado = f"R$ {valor:,.2f}"
+    valor_formatado = valor_formatado.replace(",", "v").replace(".", ",").replace("v", ".")
+    return valor_formatado
+
+def formatar_valor_sem_cifrao(valor):
+    valor_formatado = f"{valor:,.2f}"
     valor_formatado = valor_formatado.replace(",", "v").replace(".", ",").replace("v", ".")
     return valor_formatado
 
@@ -21,7 +28,7 @@ def metric_card(title, value, background_color):
     st.markdown(f"""
     <div style="display: flex; align-items: center; justify-content: center; border: 1px solid #e6e6e6; border-radius: 10px; padding: 5px; margin: 5px 0; width: 100%; background-color: {background_color};">
         <div style="flex: 1; text-align: left;">
-            <h4 style="margin: 0; font-size: 12px; color: #666;">{title}</h4>
+            <h4 style="margin: 0; font-size: 12px; color: #070707;">{title}</h4>
         </div>
         <div style="flex: 1; text-align: right;">
             <h4 style="margin: 0; font-size: 14px; color: #333;">{value}</h4>
@@ -157,12 +164,13 @@ def grafico_venda_produto_valor(produto):
                                      joinstyle="round", antialiased=True, zorder=10)
             ax.add_patch(rounded_rect)
             p.remove()  # Remover a barra original
-            ax.annotate(formatar_valor(rounded_rect.get_height()), 
+            ax.annotate(formatar_valor_sem_cifrao(rounded_rect.get_height()), 
                         (rounded_rect.get_x() + rounded_rect.get_width() / 2., rounded_rect.get_height()), 
                         ha='center', va='center', 
                         xytext=(0, 10), 
                         textcoords='offset points', 
-                        color='white')  # Texto branco
+                        color='white',
+                        fontsize=8)  
         
         ax.set_title('Venda por Produto', color='white')
         ax.set_xlabel('Produto', color='white')
@@ -255,7 +263,7 @@ with st.sidebar:
     process_button = st.button("Processar")
 
 
-if st.session_state.counter == 1:
+if st.session_state.counter >= 1:
     process_button = True
 
 if process_button and arquivo is not None:
@@ -272,7 +280,7 @@ if process_button and arquivo is not None:
         st.error(f"Erro ao processar o arquivo: {e}")    
 
 if process_button and arquivo is not None:
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["Indicadores", "Dados Carregados", "Análise Categoria", "Análise Produtos", "Pedidos Dia", "Vendas Mensal", "Análise Cliente","Regras Associação"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(["Indicadores", "Dados Carregados", "Análise Categoria", "Análise Produtos", "Pedidos Dia", "Vendas Mensal", "Análise Cliente","Recomendação","Segmentação"])
 
     with tab1:
         quantidade_clientes = len(dados['CodigoCliente'].unique())
@@ -390,3 +398,57 @@ if process_button and arquivo is not None:
                 st.write(f"Suporte mínimo usado: {min_support}")
 
                 st.dataframe(regras)
+    with tab9:
+        # Agregar dados de compras por cliente
+        cliente_compras = dados.groupby('CodigoCliente').agg({
+            'ValorPedido': 'sum',
+            'Pedido': 'count',
+            'Quantidade': 'sum'
+        }).reset_index()
+
+        # Renomear colunas para clareza
+        cliente_compras.columns = ['CodigoCliente', 'ValorTotal', 'NumPedidos', 'QuantidadeTotal']
+
+        # Padronizar os dados
+        scaler = StandardScaler()
+        cliente_compras_scaled = scaler.fit_transform(cliente_compras[['ValorTotal', 'NumPedidos', 'QuantidadeTotal']])
+
+        num_clusters = 4
+        # Aplicar K-means
+        kmeans = KMeans(n_clusters=num_clusters, random_state=42)
+        cliente_compras['Cluster'] = kmeans.fit_predict(cliente_compras_scaled)   
+
+        # Gráficos de visualização
+        fig, ax = plt.subplots(1, 3, figsize=(18, 5))
+
+        sns.scatterplot(data=cliente_compras, x='ValorTotal', y='NumPedidos', hue='Cluster', palette='viridis', ax=ax[0])
+        ax[0].set_title('Valor Total vs Número de Pedidos')
+        ax[0].set_xlabel('Valor Total')
+        ax[0].set_ylabel('Número de Pedidos')
+
+        sns.scatterplot(data=cliente_compras, x='ValorTotal', y='QuantidadeTotal', hue='Cluster', palette='viridis', ax=ax[1])
+        ax[1].set_title('Valor Total vs Quantidade Total')
+        ax[1].set_xlabel('Valor Total')
+        ax[1].set_ylabel('Quantidade Total')
+
+        sns.scatterplot(data=cliente_compras, x='NumPedidos', y='QuantidadeTotal', hue='Cluster', palette='viridis', ax=ax[2])
+        ax[2].set_title('Número de Pedidos vs Quantidade Total')
+        ax[2].set_xlabel('Número de Pedidos')
+        ax[2].set_ylabel('Quantidade Total')
+
+        plt.legend(title='Cluster')
+        plt.tight_layout() 
+
+        st.pyplot(fig)   
+
+        clientes = dados[['CodigoCliente', 'NomeCliente']].drop_duplicates()
+        cliente_compras_com_nome = pd.merge(cliente_compras, clientes, on='CodigoCliente', how='left')
+        segmentos = [0,1,2,3]
+        cluster = st.selectbox('Selecione a segmentação: ', segmentos, index=0, key='cluster')
+        st.session_state.counter = 2
+        segemento_filtrado = cliente_compras_com_nome.query(f"`Cluster` == {cluster}")
+        segemento_filtrado['ValorTotal'] = segemento_filtrado['ValorTotal'].apply(formatar_valor)
+        st.dataframe(segemento_filtrado)
+
+
+
