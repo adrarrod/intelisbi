@@ -180,19 +180,28 @@ def grafico_venda_produto_valor(produto):
     return fig, ax    
 
 def grafico_venda_mensal(vendas_por_mes):
+    vendas_por_mes['MesAno'] = pd.to_datetime(vendas_por_mes['MesAno'], format='%m%Y')
+    vendas_por_mes = vendas_por_mes.sort_values('MesAno')
+    vendas_por_mes['MesAno'] = vendas_por_mes['MesAno'].dt.strftime('%m/%Y')
 
     # Configurar o gráfico com linha e variação percentual apenas com os meses
     fig, ax1 = plt.subplots(figsize=(12, 6))
 
     # Gráfico de linha para valor vendido
     sns.lineplot(x='MesAno', y='Valor Venda Mensal', data=vendas_por_mes, marker='o', ax=ax1)
-    ax1.set_xlabel('Mês')
+    ax1.set_xlabel('Mês/Ano')
     ax1.set_ylabel('Valor Vendido (R$)', color='b')
     ax1.tick_params(axis='y', labelcolor='b')
 
     # Formatando os valores no eixo y
     labels = [formatar_valor(valor) for valor in ax1.get_yticks()]
     ax1.set_yticklabels(labels)
+
+    # Ajustar os rótulos do eixo x
+    ax1.set_xticklabels(ax1.get_xticklabels(), rotation=45, ha='right')
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    plt.subplots_adjust(bottom=0.2)  # Aumenta o espaço na parte inferior para evitar sobreposição
 
     plt.title('Vendas por Mês')
     plt.tight_layout()
@@ -336,31 +345,48 @@ if process_button and arquivo is not None:
         transacoes = dados.groupby(['Pedido', 'NomeProduto'])['Quantidade'].sum().unstack().reset_index().fillna(0).set_index('Pedido')
         transacoes = transacoes.applymap(lambda x: 1 if x > 0 else 0)
 
+        # Ajustar parâmetros do Apriori
+        min_support = st.sidebar.slider('min_support', 0.01, 0.5, 0.01)
+        min_threshold = st.sidebar.slider('min_threshold', 1.0, 10.0, 1.0)
+
         # Aplicar o algoritmo Apriori
-        frequent_itemsets = apriori(transacoes, min_support=0.01, use_colnames=True)
-        regras = association_rules(frequent_itemsets, metric="lift", min_threshold=1)
+        frequent_itemsets = apriori(transacoes, min_support=min_support, use_colnames=True)
+        if frequent_itemsets.empty:
+            st.warning("Nenhum itemset frequente encontrado. Tente ajustar o parâmetro de suporte mínimo.")
+        else:
+            regras = association_rules(frequent_itemsets, metric="lift", min_threshold=min_threshold)
+            if regras.empty:
+                st.warning("Nenhuma regra encontrada. Tente ajustar os parâmetros de suporte e limiar de lift.")
+            else:
+                # Selecionar as regras mais fortes para visualização simplificada
+                top_regras = regras.nlargest(15, 'lift')
 
-        # Selecionar as regras mais fortes para visualização simplificada
-        top_regras = regras.nlargest(15, 'lift')
+                # Criar o gráfico de rede
+                G = nx.DiGraph()
 
-        # Criar o gráfico de rede
-        G = nx.DiGraph()
+                for _, row in top_regras.iterrows():
+                    for antecedent in row['antecedents']:
+                        for consequent in row['consequents']:
+                            G.add_edge(antecedent, consequent, weight=row['lift'])
 
-        for _, row in top_regras.iterrows():
-            for antecedent in row['antecedents']:
-                for consequent in row['consequents']:
-                    G.add_edge(antecedent, consequent, weight=row['lift'])
+                # Posição dos nós
+                pos = nx.spring_layout(G, seed=42)
 
-        # Posição dos nós
-        pos = nx.spring_layout(G, seed=42)
+                # Desenhar o gráfico de rede
+                draw_network(G, pos)
 
-        # Desenhar o gráfico de rede
-        draw_network(G, pos)
+                # Adicionar representação textual das regras de associação
+                st.subheader("Regras de Associação")
+                for _, row in top_regras.iterrows():
+                    antecedents = ", ".join(list(row['antecedents']))
+                    consequents = ", ".join(list(row['consequents']))
+                    lift_percentage = (row['lift'] - 1) * 100
+                    st.write(f"Se a pessoa comprar {antecedents}, então ela tem {lift_percentage:.2f}% mais chance de comprar {consequents}.")
+                
+                # Exibir tabela de regras de associação com suporte
+                st.subheader("Tabela de Regras de Associação")
+                st.dataframe(top_regras[['antecedents', 'consequents', 'support', 'confidence', 'lift']])
 
-        # Adicionar representação textual das regras de associação
-        print("\nRegras de Associação:")
-        for _, row in top_regras.iterrows():
-            antecedents = ", ".join(list(row['antecedents']))
-            consequents = ", ".join(list(row['consequents']))
-            lift_percentage = (row['lift'] - 1) * 100
-            st.write(f"Se a pessoa comprar {antecedents}, então ela tem {lift_percentage:.2f}% mais chance de comprar {consequents}.")
+                st.write(f"Suporte mínimo usado: {min_support}")
+
+                st.dataframe(regras)
