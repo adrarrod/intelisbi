@@ -18,6 +18,9 @@ def formatar_milhar(valor):
         return f'{valor:,.0f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
     return valor
 
+def formatar_percentual(valor):
+    return f'{valor:.2f}'.replace('.', ',') + '%'
+
 def formatar_valor_sem_cifrao(valor):
     valor_formatado = f"{valor:,.2f}"
     valor_formatado = valor_formatado.replace(",", "v").replace(".", ",").replace("v", ".")
@@ -43,6 +46,8 @@ def bases_dados_categoria_quantidade(dados,anosmes):
     filtro_mes = dados.query(f"`MesAno` == '{anosmes}'")
     vendas_por_categoria = filtro_mes.groupby('Categoria')['Quantidade'].sum().reset_index()
     vendas_por_categoria = vendas_por_categoria.sort_values(by='Quantidade', ascending=False)
+    total_quantidade = vendas_por_categoria['Quantidade'].sum()
+    vendas_por_categoria['Percentual'] = (vendas_por_categoria['Quantidade'] / total_quantidade) * 100
     return vendas_por_categoria
 
 def base_de_pedidos(dados):
@@ -56,12 +61,19 @@ def base_categoria_ticket_medio(dados,anosmes):
         categoria = pd.DataFrame(filtro_mes.groupby(['Categoria'])['ValorPedido'].sum().sort_values(ascending=False))
         categoria.rename(columns={'ValorPedido': 'Valor Venda'}, inplace=True)
         categoria = categoria.reset_index()
-        categoria_cliente = pd.DataFrame(filtro_mes.groupby(['Categoria'])['CodigoCliente'].nunique().reset_index())
-        categoria_cliente.rename(columns={'CodigoCliente': 'Quantidade Cliente'}, inplace=True)
+        categoria_cliente = pd.DataFrame(filtro_mes.groupby(['Categoria'])['Quantidade'].sum().sort_values(ascending=False))
+        categoria_cliente.rename(columns={'Quantidade': 'Quantidade Vendida'}, inplace=True)
         df_combinado = pd.merge(categoria, categoria_cliente, on='Categoria')
-        df_combinado['Ticket Médio'] = df_combinado['Valor Venda'] / df_combinado['Quantidade Cliente']
+        df_combinado['Ticket Médio'] = df_combinado['Valor Venda'] / df_combinado['Quantidade Vendida']
         df_combinado = df_combinado.sort_values(by='Ticket Médio', ascending=False)
         return df_combinado
+
+def base_categoria_faturamento(dados,anosmes):
+        filtro_mes = dados.query(f"`MesAno` == '{anosmes}'")
+        categoria_faturamento = pd.DataFrame(filtro_mes.groupby(['Categoria'])['ValorPedido'].sum().sort_values(ascending=False))
+        categoria_faturamento.rename(columns={'ValorPedido': 'Valor Venda'}, inplace=True)
+        categoria_faturamento = categoria_faturamento.reset_index()    
+        return categoria_faturamento 
 
 def base_venda_produto_valor(dados):
         produto = pd.DataFrame(dados.groupby(['NomeProduto'])['ValorPedido'].sum().sort_values(ascending=False))
@@ -173,9 +185,10 @@ def grafico_por_categoria(vendas_por_categoria):
                         ha='center', va='center', 
                         xytext=(0, 10), 
                         textcoords='offset points', 
-                        color='white')  # Texto branco
+                        color='white',
+                        fontsize=14)  # Texto branco
         
-        ax.set_title('Vendas por Categoria de Produto', color='white')
+        ax.set_title('Vendas por Categoria', color='white',fontsize=14)
         #ax.set_xlabel('Categoria', color='white')
         #ax.set_ylabel('Quantidade Vendida', color='white')
         ax.set_xlabel('')
@@ -209,9 +222,10 @@ def grafico_por_categoria_ticketmedio(df_combinado):
                         ha='center', va='center', 
                         xytext=(0, 10), 
                         textcoords='offset points', 
-                        color='white')  # Texto branco
+                        color='white',
+                        fontsize=14)  # Texto branco
         
-        ax.set_title('Ticket Médio por Categoria', color='white')
+        ax.set_title('Ticket Médio por Categoria', color='white',fontsize=14)
         ax.set_xlabel('')
         ax.set_ylabel('')
         ax.tick_params(colors='white')  # Altera a cor dos ticks e seus labels
@@ -244,17 +258,20 @@ def grafico_venda_produto_valor(produto):
                         xytext=(0, 10), 
                         textcoords='offset points', 
                         color='white',
-                        fontsize=8)  
+                        fontsize=8,
+                        rotation=30)  
         
-        ax.set_title('Venda por Produto', color='white')
+        ax.set_title('Faturamento por Produto', color='white')
         ax.set_xlabel('')
         ax.set_ylabel('')
         ax.tick_params(colors='white')  # Altera a cor dos ticks e seus labels
-        plt.xticks(rotation=45, color='white')
-        plt.yticks(color='white')
+        plt.xticks(rotation=90, color='white')
+        #plt.yticks(color='white')
+        plt.yticks([])
         fig.patch.set_facecolor('black')  # Define a cor de fundo da figura
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False) 
         ax.patch.set_facecolor('black')   # Define a cor de fundo dos eixos
         ax.grid(False)
         plt.tight_layout()
@@ -315,14 +332,16 @@ def grafico_venda_dia(venda_dia):
                         ha='left', va='center', 
                         xytext=(5, 0), 
                         textcoords='offset points', 
-                        color='white')  # Texto branco
+                        color='white',
+                        fontsize=8)
         
         ax.set_title('Venda por Dia / Quantidade Produto', color='white')
         #ax.set_ylabel('Data Venda', color='white')
         #ax.set_xlabel('Quantidade Produto', color='white')
         ax.set_ylabel('')
         ax.set_xlabel('')
-        ax.tick_params(colors='white')  # Altera a cor dos ticks e seus labels
+        ax.tick_params(axis='x', colors='white', labelsize=8)  # Altera a cor e o tamanho da fonte dos ticks do eixo X
+        ax.tick_params(axis='y', colors='white', labelsize=8)
         plt.xticks(color='white')
         plt.yticks(color='white')
         fig.patch.set_facecolor('black')  # Define a cor de fundo da figura
@@ -374,6 +393,78 @@ def grafico_produto_percentual(vendas_diarias):
         ax.set_ylim(0, 105)
 
         return fig
+
+def grafico_categoria_faturamento(categoria_faturamento):
+    with sns.axes_style("darkgrid"):
+        fig, ax = plt.subplots(figsize=(10, 6))
+        sns.barplot(x='Categoria', y='Valor Venda', data=categoria_faturamento, ax=ax, palette="colorblind", width=0.4, edgecolor='none')
+        
+        for p in ax.patches:
+            # Criar um retângulo com bordas arredondadas
+            rounded_rect = Rectangle((p.get_x(), 0), p.get_width(), p.get_height(), 
+                                     linewidth=0, edgecolor='none', facecolor=p.get_facecolor(), 
+                                     joinstyle="round", antialiased=True, zorder=10)
+            ax.add_patch(rounded_rect)
+            p.remove()  # Remover a barra original
+            ax.annotate(formatar_valor(rounded_rect.get_height()), 
+                        (rounded_rect.get_x() + rounded_rect.get_width() / 2., rounded_rect.get_height()), 
+                        ha='center', va='center', 
+                        xytext=(0, 10), 
+                        textcoords='offset points', 
+                        color='white',
+                        fontsize=14)  # Texto branco
+        
+        ax.set_title('Faturamento por Categoria', color='white',fontsize=14)
+        ax.set_xlabel('')
+        ax.set_ylabel('')
+        ax.tick_params(colors='white')  # Altera a cor dos ticks e seus labels
+        plt.xticks(rotation=45, color='white')
+        plt.yticks(color='white')
+        fig.patch.set_facecolor('black')  # Define a cor de fundo da figura
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.patch.set_facecolor('black')   # Define a cor de fundo dos eixos
+        ax.grid(False)
+        plt.tight_layout()
+        
+    return fig, ax
+
+def grafico_por_categoria_percentual(vendas_por_categoria):
+    with sns.axes_style("darkgrid"):
+        fig, ax = plt.subplots(figsize=(10, 6))
+        sns.barplot(x='Categoria', y='Percentual', data=vendas_por_categoria, ax=ax, palette="colorblind", width=0.4, edgecolor='none')
+        
+        for p in ax.patches:
+            # Criar um retângulo com bordas arredondadas
+            rounded_rect = Rectangle((p.get_x(), 0), p.get_width(), p.get_height(), 
+                                     linewidth=0, edgecolor='none', facecolor=p.get_facecolor(), 
+                                     joinstyle="round", antialiased=True, zorder=10)
+            ax.add_patch(rounded_rect)
+            p.remove()  # Remover a barra original
+            ax.annotate(formatar_percentual(rounded_rect.get_height()), 
+                        (rounded_rect.get_x() + rounded_rect.get_width() / 2., rounded_rect.get_height()), 
+                        ha='center', va='center', 
+                        xytext=(0, 10), 
+                        textcoords='offset points', 
+                        color='white',
+                        fontsize=14)  # Texto branco
+        
+        ax.set_title('Percentual de Vendas por Categoria', color='white',fontsize=14)
+        #ax.set_xlabel('Categoria', color='white')
+        #ax.set_ylabel('Quantidade Vendida', color='white')
+        ax.set_xlabel('')
+        ax.set_ylabel('')
+        ax.tick_params(colors='white')  # Altera a cor dos ticks e seus labels
+        plt.xticks(rotation=45, color='white')
+        plt.yticks(color='white')
+        fig.patch.set_facecolor('black')  # Define a cor de fundo da figura
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.patch.set_facecolor('black')   # Define a cor de fundo dos eixos
+        ax.grid(False)
+        plt.tight_layout()
+        
+    return fig, ax
 
 @st.cache_resource
 def ler_arquivo(arquivo):

@@ -53,6 +53,7 @@ if process_button and arquivo is not None:
         total_faturamento = formatar_valor(total_faturamento)
         quantidade_produtos_vendidos = base_dados_quantidade_produtos_vendidos(dados)
         ticket_medio_produto = base_dados_ticket_medio_produto(dados)
+        ticket_medio_produto['Quantidade Venda Produto'] = ticket_medio_produto['Quantidade Venda Produto'].apply(formatar_milhar)
         ticket_medio_produto['Quantidade Venda Produto'] = ticket_medio_produto['Quantidade Venda Produto'].astype(str)
         gasto_por_cliente = base_dados_gasto_cliente(dados)
         quantidade_periodo = base_dados_periodo(dados) 
@@ -69,8 +70,8 @@ if process_button and arquivo is not None:
             metric_card("Valor Ticket Médio",ticket_medio_cliente, "#f0f0f0")
             metric_card("Quantidade Períodos/Mês", quantidade_periodo, "#f0f0f0")
         with col3:
-            metric_card("Quantidade Vendas",quantidade_vendas, "#f0f0f0")
-            metric_card("Produtos Vendidos",quantidade_produtos_vendidos, "#f0f0f0")
+            metric_card("Quantidade Vendas",formatar_milhar(quantidade_vendas), "#f0f0f0")
+            metric_card("Produtos Vendidos",formatar_milhar(int(quantidade_produtos_vendidos)), "#f0f0f0")
         st.write(" ")
         st.header("Dados de Produto")
         st.dataframe(ticket_medio_produto, use_container_width=True)
@@ -98,15 +99,27 @@ if process_button and arquivo is not None:
 
     with tab3:
         mes_ano_unicos = dados['MesAno'].unique()
-        selecao_mes_ano = st.selectbox('Selecione o Mês/Ano', mes_ano_unicos, index=0, key='mes_ano_unicos')
+        tamanho = len(mes_ano_unicos)
+        selecao_mes_ano = st.selectbox('Selecione o Mês/Ano', mes_ano_unicos, index=(tamanho-1), key='mes_ano_unicos')
         st.session_state.counter = 3
         col1, col2 = st.columns(2)
+        vendas_por_categoria = bases_dados_categoria_quantidade(dados,selecao_mes_ano)
+        df_combinado = base_categoria_ticket_medio(dados,selecao_mes_ano)
+        df_combinado['Categoria_Ordenada'] = pd.Categorical(df_combinado['Categoria'], categories=vendas_por_categoria['Categoria'], ordered=True)
+        df_combinado = df_combinado.sort_values('Categoria_Ordenada')
+        categoria_faturamento = base_categoria_faturamento(dados,selecao_mes_ano)
+        categoria_faturamento['Categoria_Ordenada'] = pd.Categorical(categoria_faturamento['Categoria'], categories=vendas_por_categoria['Categoria'], ordered=True)
+        categoria_faturamento = categoria_faturamento.sort_values('Categoria_Ordenada')
         with col1:
-            vendas_por_categoria = bases_dados_categoria_quantidade(dados,selecao_mes_ano)
             fig, ax = grafico_por_categoria(vendas_por_categoria)
             st.pyplot(fig)
+            st.write(" ")            
+            fig, ax = grafico_por_categoria_percentual(vendas_por_categoria)
+            st.pyplot(fig)            
         with col2:
-            df_combinado = base_categoria_ticket_medio(dados,selecao_mes_ano)
+            fig, ax = grafico_categoria_faturamento(categoria_faturamento)
+            st.pyplot(fig)
+            st.write(" ")
             fig, ax =  grafico_por_categoria_ticketmedio(df_combinado)
             st.pyplot(fig)
 
@@ -142,7 +155,7 @@ if process_button and arquivo is not None:
     with tab8:
         def draw_network(G, pos):
             plt.figure(figsize=(14, 6))
-            nx.draw_networkx_nodes(G, pos, node_size=5000, node_color='green')
+            nx.draw_networkx_nodes(G, pos, node_size=4000, node_color='green')
             nx.draw_networkx_edges(G, pos, width=[d['weight'] for (_, _, d) in G.edges(data=True)], alpha=0.6, edge_color='gray')
             nx.draw_networkx_labels(G, pos, font_size=15, font_color='white', font_weight='bold')  # Alterado para font_color='white'
             
