@@ -124,12 +124,33 @@ if process_button and arquivo is not None:
             st.pyplot(fig)
 
     with tab4:
-        mes_ano_unicos = dados['MesAno'].unique()
-        selecao_mes_ano = st.selectbox('Selecione o Mês/Ano', mes_ano_unicos, index=0, key='mes_ano_unicos1')
-        st.session_state.counter = 4
-        produto = base_venda_produto_valor_mes(dados,selecao_mes_ano)
-        fig, ax  = grafico_venda_produto_valor(produto)
-        st.pyplot(fig)
+            if st.checkbox("Visualizar todos os meses"):
+                todos = True
+            else:
+                todos = False
+            mes_ano_unicos = dados['MesAno'].unique()
+            tamanho = len(mes_ano_unicos)
+            selecao_mes_ano = st.selectbox('Selecione o Mês/Ano', mes_ano_unicos, index=tamanho-1, key='mes_ano_unicos1')
+            st.session_state.counter = 4
+            col1, col2 = st.columns(2)
+            with col1:
+                produto_quantidade = base_venda_produto_quantidade_analise(dados,selecao_mes_ano,todos)
+                fig, ax  = grafico_produto_quantidade(produto_quantidade)
+                st.pyplot(fig)
+                #fig, ax = grafico_por_produto_percentual(produto_quantidade)
+                fig, ax = template_grafico_barras(produto_quantidade,'NomeProduto','Percentual','Percentual','Percentual de Faturamento Produto')
+                st.pyplot(fig)                
+            with col2:
+                produto_faturamento = base_venda_produto_valor_analise(dados,selecao_mes_ano,todos)
+                produto_faturamento['Produto_Ordenada'] = pd.Categorical(produto_faturamento['NomeProduto'], categories=produto_quantidade['NomeProduto'], ordered=True)
+                produto_faturamento = produto_faturamento.sort_values('Produto_Ordenada')
+                fig, ax = template_grafico_barras(produto_faturamento,'NomeProduto','Valor Venda','Sem Cifrao','Faturamento por Produto')
+                st.pyplot(fig)
+                produto_com_ticketmedio = base_venda_produto_ticktmedio_analise(dados,selecao_mes_ano,todos)
+                produto_com_ticketmedio['Produto_Ordenada'] = pd.Categorical(produto_com_ticketmedio['NomeProduto'], categories=produto_quantidade['NomeProduto'], ordered=True)
+                produto_com_ticketmedio = produto_com_ticketmedio.sort_values('Produto_Ordenada')
+                fig, ax = template_grafico_barras(produto_com_ticketmedio,'NomeProduto','Ticket Médio','Sem Cifrao','Ticket Médio por Produto')
+                st.pyplot(fig)               
 
     with tab5:
         mes_ano_unicos = dados['MesAno'].unique()

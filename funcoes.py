@@ -26,6 +26,25 @@ def formatar_valor_sem_cifrao(valor):
     valor_formatado = valor_formatado.replace(",", "v").replace(".", ",").replace("v", ".")
     return valor_formatado
 
+def formatar(valor,tipo_formato):
+     
+     if tipo_formato == "Valor":
+        valor_formatado = f"R$ {valor:,.2f}"
+        valor_formatado = valor_formatado.replace(",", "v").replace(".", ",").replace("v", ".")
+        return valor_formatado
+     elif tipo_formato == "Milhar":
+        if isinstance(valor, (int, float)):
+            return f'{valor:,.0f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+        return valor   
+     elif tipo_formato == "Percentual":
+        return f'{valor:.2f}'.replace('.', ',') + '%'
+     elif tipo_formato == "Sem Cifrao":
+        valor_formatado = f"{valor:,.2f}"
+        valor_formatado = valor_formatado.replace(",", "v").replace(".", ",").replace("v", ".")
+        return valor_formatado                  
+     else:
+         return valor
+
 def metric_card(title, value, background_color):
     st.markdown(f"""
     <div style="display: flex; align-items: center; justify-content: center; border: 1px solid #e6e6e6; border-radius: 10px; padding: 5px; margin: 5px 0; width: 100%; background-color: {background_color};">
@@ -81,12 +100,43 @@ def base_venda_produto_valor(dados):
         produto = produto.reset_index()
         return produto
 
-def base_venda_produto_valor_mes(dados,anosmes):
-        filtro_mes = dados.query(f"`MesAno` == '{anosmes}'")
-        produto = pd.DataFrame(filtro_mes.groupby(['NomeProduto'])['ValorPedido'].sum().sort_values(ascending=False))
-        produto.rename(columns={'ValorPedido': 'Valor Venda'}, inplace=True)
-        produto = produto.reset_index()
-        return produto
+def base_venda_produto_valor_analise(dados,anosmes,todos):
+        if todos:
+            filtro_mes = dados
+        else:
+            filtro_mes = dados.query(f"`MesAno` == '{anosmes}'")
+        produto_faturamento = pd.DataFrame(filtro_mes.groupby(['NomeProduto'])['ValorPedido'].sum().sort_values(ascending=False))
+        produto_faturamento.rename(columns={'ValorPedido': 'Valor Venda'}, inplace=True)
+        produto_faturamento = produto_faturamento.reset_index()
+        return produto_faturamento
+
+def base_venda_produto_quantidade_analise(dados,anosmes,todos):
+        if todos:
+            filtro_mes = dados
+        else:
+            filtro_mes = dados.query(f"`MesAno` == '{anosmes}'")
+        produto_quantidade = pd.DataFrame(filtro_mes.groupby(['NomeProduto'])['Quantidade'].sum().sort_values(ascending=False))
+        produto_quantidade.rename(columns={'Quantidade': 'Quantidade Produto'}, inplace=True)
+        produto_quantidade = produto_quantidade.reset_index()
+        total_quantidade = produto_quantidade['Quantidade Produto'].sum()
+        produto_quantidade['Percentual'] = (produto_quantidade['Quantidade Produto'] / total_quantidade) * 100
+        return produto_quantidade
+
+def base_venda_produto_ticktmedio_analise(dados,anosmes,todos):
+        if todos:
+            filtro_mes = dados
+        else:
+            filtro_mes = dados.query(f"`MesAno` == '{anosmes}'")
+        produto_ticktmedio_analise = pd.DataFrame(filtro_mes.groupby(['NomeProduto'])['ValorPedido'].sum().sort_values(ascending=False))
+        produto_ticktmedio_analise.rename(columns={'ValorPedido': 'Valor Faturamento'}, inplace=True)
+        produto_ticktmedio_analise = produto_ticktmedio_analise.reset_index()
+        produto_quantidade_analise = pd.DataFrame(filtro_mes.groupby(['NomeProduto'])['Quantidade'].sum().sort_values(ascending=False))
+        produto_quantidade_analise.rename(columns={'Quantidade': 'Quantidade Vendida'}, inplace=True)
+        produto_quantidade_analise = produto_quantidade_analise.reset_index()
+        df_combinado = pd.merge(produto_ticktmedio_analise, produto_quantidade_analise, on='NomeProduto')
+        df_combinado['Ticket Médio'] = df_combinado['Valor Faturamento'] / df_combinado['Quantidade Vendida']
+        df_combinado = df_combinado.sort_values(by='Ticket Médio', ascending=False)
+        return df_combinado
 
 def base_venda_mensal(dados):
     venda_mensal = pd.DataFrame(dados.groupby(['MesAno'])['ValorPedido'].sum().reset_index())
@@ -240,10 +290,10 @@ def grafico_por_categoria_ticketmedio(df_combinado):
         
     return fig, ax
 
-def grafico_venda_produto_valor(produto):
+def grafico_produto_quantidade(produto_quatidade):
     with sns.axes_style("darkgrid"):
         fig, ax = plt.subplots(figsize=(10, 6))
-        sns.barplot(x='NomeProduto', y='Valor Venda', data=produto, ax=ax, palette="colorblind", width=0.4, edgecolor='none')
+        sns.barplot(x='NomeProduto', y='Quantidade Produto', data=produto_quatidade, ax=ax, palette="colorblind", width=0.4, edgecolor='none')
         
         for p in ax.patches:
             # Criar um retângulo com bordas arredondadas
@@ -252,7 +302,7 @@ def grafico_venda_produto_valor(produto):
                                      joinstyle="round", antialiased=True, zorder=10)
             ax.add_patch(rounded_rect)
             p.remove()  # Remover a barra original
-            ax.annotate(formatar_valor_sem_cifrao(rounded_rect.get_height()), 
+            ax.annotate(formatar_milhar(rounded_rect.get_height()), 
                         (rounded_rect.get_x() + rounded_rect.get_width() / 2., rounded_rect.get_height()), 
                         ha='center', va='center', 
                         xytext=(0, 10), 
@@ -261,7 +311,7 @@ def grafico_venda_produto_valor(produto):
                         fontsize=8,
                         rotation=30)  
         
-        ax.set_title('Faturamento por Produto', color='white')
+        ax.set_title('Quantidade Produto Vendido', color='white')
         ax.set_xlabel('')
         ax.set_ylabel('')
         ax.tick_params(colors='white')  # Altera a cor dos ticks e seus labels
@@ -276,7 +326,7 @@ def grafico_venda_produto_valor(produto):
         ax.grid(False)
         plt.tight_layout()
         
-    return fig, ax    
+    return fig, ax   
 
 def grafico_venda_mensal(vendas_por_mes):
     vendas_por_mes['MesAno'] = pd.to_datetime(vendas_por_mes['MesAno'], format='%m%Y')
@@ -465,6 +515,45 @@ def grafico_por_categoria_percentual(vendas_por_categoria):
         plt.tight_layout()
         
     return fig, ax
+
+def template_grafico_barras(banco_dados,colunaX,colunaY,tipo_formato,titulo):
+    with sns.axes_style("darkgrid"):
+        fig, ax = plt.subplots(figsize=(10, 6))
+        sns.barplot(x=colunaX , y=colunaY, data=banco_dados, ax=ax, palette="colorblind", width=0.4, edgecolor='none', hue=colunaX, legend=False)
+       
+        for p in ax.patches:
+            # Criar um retângulo com bordas arredondadas
+            rounded_rect = Rectangle((p.get_x(), 0), p.get_width(), p.get_height(), 
+                                     linewidth=0, edgecolor='none', facecolor=p.get_facecolor(), 
+                                     joinstyle="round", antialiased=True, zorder=10)
+            ax.add_patch(rounded_rect)
+            p.remove()  # Remover a barra original
+     
+            ax.annotate(formatar(rounded_rect.get_height(),tipo_formato), 
+                        (rounded_rect.get_x() + rounded_rect.get_width() / 2., rounded_rect.get_height()), 
+                        ha='center', va='center', 
+                        xytext=(0, 10), 
+                        textcoords='offset points', 
+                        color='white',
+                        fontsize=8,
+                        rotation=30)  # Texto branco
+        
+        ax.set_title(titulo, color='white',fontsize=14)
+        ax.set_xlabel('')
+        ax.set_ylabel('')
+        ax.tick_params(colors='white')  # Altera a cor dos ticks e seus labels
+        plt.xticks(rotation=90, color='white')
+        #plt.yticks(color='white')
+        plt.yticks([])
+        fig.patch.set_facecolor('black')  # Define a cor de fundo da figura
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False) 
+        ax.patch.set_facecolor('black')   # Define a cor de fundo dos eixos
+        ax.grid(False)
+        plt.tight_layout()
+        
+    return fig, ax       
 
 @st.cache_resource
 def ler_arquivo(arquivo):
