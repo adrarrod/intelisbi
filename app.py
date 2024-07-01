@@ -111,16 +111,16 @@ if process_button and arquivo is not None:
         categoria_faturamento['Categoria_Ordenada'] = pd.Categorical(categoria_faturamento['Categoria'], categories=vendas_por_categoria['Categoria'], ordered=True)
         categoria_faturamento = categoria_faturamento.sort_values('Categoria_Ordenada')
         with col1:
-            fig, ax = grafico_por_categoria(vendas_por_categoria)
+            fig, ax = template_grafico_barras(vendas_por_categoria,'Categoria','Quantidade','Milhar','Vendas por Categoria')
             st.pyplot(fig)
             st.write(" ")            
-            fig, ax = grafico_por_categoria_percentual(vendas_por_categoria)
+            fig, ax = template_grafico_barras(vendas_por_categoria,'Categoria','Percentual','Percentual','Percentual de Vendas por Categoria')
             st.pyplot(fig)            
         with col2:
-            fig, ax = grafico_categoria_faturamento(categoria_faturamento)
+            fig, ax = template_grafico_barras(categoria_faturamento,'Categoria','Valor Venda','Sem Cifrao','Faturamento por Categoria')
             st.pyplot(fig)
             st.write(" ")
-            fig, ax =  grafico_por_categoria_ticketmedio(df_combinado)
+            fig, ax = template_grafico_barras(df_combinado,'Categoria','Ticket Médio','Sem Cifrao','Ticket Médio por Categoria')
             st.pyplot(fig)
 
     with tab4:
@@ -131,30 +131,34 @@ if process_button and arquivo is not None:
             mes_ano_unicos = dados['MesAno'].unique()
             tamanho = len(mes_ano_unicos)
             selecao_mes_ano = st.selectbox('Selecione o Mês/Ano', mes_ano_unicos, index=tamanho-1, key='mes_ano_unicos1')
+            st.header("TOP 10 de Produtos")
             st.session_state.counter = 4
             col1, col2 = st.columns(2)
             with col1:
                 produto_quantidade = base_venda_produto_quantidade_analise(dados,selecao_mes_ano,todos)
-                fig, ax  = grafico_produto_quantidade(produto_quantidade)
+                fig, ax = template_grafico_barras(produto_quantidade.head(10),'NomeProduto','Quantidade Produto','Milhar','Quantidade Produto Vendido')
                 st.pyplot(fig)
-                #fig, ax = grafico_por_produto_percentual(produto_quantidade)
-                fig, ax = template_grafico_barras(produto_quantidade,'NomeProduto','Percentual','Percentual','Percentual de Faturamento Produto')
+                fig, ax = template_grafico_barras(produto_quantidade.head(10),'NomeProduto','Percentual','Percentual','Percentual de Faturamento Produto')
                 st.pyplot(fig)                
             with col2:
                 produto_faturamento = base_venda_produto_valor_analise(dados,selecao_mes_ano,todos)
                 produto_faturamento['Produto_Ordenada'] = pd.Categorical(produto_faturamento['NomeProduto'], categories=produto_quantidade['NomeProduto'], ordered=True)
                 produto_faturamento = produto_faturamento.sort_values('Produto_Ordenada')
-                fig, ax = template_grafico_barras(produto_faturamento,'NomeProduto','Valor Venda','Sem Cifrao','Faturamento por Produto')
+                fig, ax = template_grafico_barras(produto_faturamento.head(10),'NomeProduto','Valor Venda','Sem Cifrao','Faturamento por Produto')
                 st.pyplot(fig)
                 produto_com_ticketmedio = base_venda_produto_ticktmedio_analise(dados,selecao_mes_ano,todos)
                 produto_com_ticketmedio['Produto_Ordenada'] = pd.Categorical(produto_com_ticketmedio['NomeProduto'], categories=produto_quantidade['NomeProduto'], ordered=True)
                 produto_com_ticketmedio = produto_com_ticketmedio.sort_values('Produto_Ordenada')
-                fig, ax = template_grafico_barras(produto_com_ticketmedio,'NomeProduto','Ticket Médio','Sem Cifrao','Ticket Médio por Produto')
-                st.pyplot(fig)               
+                fig, ax = template_grafico_barras(produto_com_ticketmedio.head(10),'NomeProduto','Ticket Médio','Sem Cifrao','Ticket Médio por Produto')
+                st.pyplot(fig)    
+            fig = grafico_treemap_produto_valor(produto_faturamento)   
+            st.plotly_chart(fig, use_container_width=True)     
 
     with tab5:
         mes_ano_unicos = dados['MesAno'].unique()
-        selecao_mes_ano = st.selectbox('Selecione o Mês/Ano', mes_ano_unicos, index=0, key='mes_ano_select')
+        mes_ano_unicos = dados['MesAno'].unique()
+        tamanho = len(mes_ano_unicos)
+        selecao_mes_ano = st.selectbox('Selecione o Mês/Ano', mes_ano_unicos, index=tamanho-1, key='mes_ano_select')
         st.session_state.counter = 1
         venda_dia = base_dados_dia(dados,selecao_mes_ano)
         fig, ax = grafico_venda_dia(venda_dia)
@@ -170,15 +174,17 @@ if process_button and arquivo is not None:
         st.pyplot(fig)
 
     with tab7:
-        gasto_por_cliente = base_dados_gasto_cliente(dados)
-        st.dataframe(gasto_por_cliente)
+        gasto_por_cliente = base_dados_gasto_cliente_treemap(dados)
+        fig = grafico_treemap_gastos_por_cliente(gasto_por_cliente)
+        st.plotly_chart(fig, use_container_width=True)    
+        #st.dataframe(gasto_por_cliente)
 
     with tab8:
         def draw_network(G, pos):
             plt.figure(figsize=(14, 6))
-            nx.draw_networkx_nodes(G, pos, node_size=4000, node_color='green')
+            nx.draw_networkx_nodes(G, pos, node_size=3000, node_color='green')
             nx.draw_networkx_edges(G, pos, width=[d['weight'] for (_, _, d) in G.edges(data=True)], alpha=0.6, edge_color='gray')
-            nx.draw_networkx_labels(G, pos, font_size=15, font_color='white', font_weight='bold')  # Alterado para font_color='white'
+            nx.draw_networkx_labels(G, pos, font_size=10, font_color='white', font_weight='bold')  # Alterado para font_color='white'
             
             # Adicionar rótulos às arestas
             edge_labels = nx.get_edge_attributes(G, 'weight')
@@ -265,22 +271,39 @@ if process_button and arquivo is not None:
         fig, ax = plt.subplots(1, 3, figsize=(18, 5))
 
         sns.scatterplot(data=cliente_compras, x='ValorTotal', y='NumPedidos', hue='Cluster', palette='viridis', ax=ax[0])
-        ax[0].set_title('Valor Total vs Número de Pedidos')
-        ax[0].set_xlabel('Valor Total')
-        ax[0].set_ylabel('Número de Pedidos')
+        ax[0].set_title('Valor Total vs Número de Pedidos', color='white')
+        ax[0].set_xlabel('Valor Total', color='white')
+        ax[0].set_ylabel('Número de Pedidos', color='white')
+        ax[0].tick_params(colors='white')
+        ax[0].set_facecolor('black')
+        ax[0].grid(False)
 
         sns.scatterplot(data=cliente_compras, x='ValorTotal', y='QuantidadeTotal', hue='Cluster', palette='viridis', ax=ax[1])
-        ax[1].set_title('Valor Total vs Quantidade Total')
-        ax[1].set_xlabel('Valor Total')
-        ax[1].set_ylabel('Quantidade Total')
+        ax[1].set_title('Valor Total vs Quantidade Total', color='white')
+        ax[1].set_xlabel('Valor Total', color='white')
+        ax[1].set_ylabel('Quantidade Total', color='white')
+        ax[1].tick_params(colors='white')
+        ax[1].set_facecolor('black')
+        ax[1].grid(False)
 
         sns.scatterplot(data=cliente_compras, x='NumPedidos', y='QuantidadeTotal', hue='Cluster', palette='viridis', ax=ax[2])
-        ax[2].set_title('Número de Pedidos vs Quantidade Total')
-        ax[2].set_xlabel('Número de Pedidos')
-        ax[2].set_ylabel('Quantidade Total')
+        ax[2].set_title('Número de Pedidos vs Quantidade Total', color='white')
+        ax[2].set_xlabel('Número de Pedidos', color='white')
+        ax[2].set_ylabel('Quantidade Total', color='white')
+        ax[2].tick_params(colors='white')
+        ax[2].set_facecolor('black')
+        ax[2].grid(False)
 
-        plt.legend(title='Cluster')
-        plt.tight_layout() 
+        # Ajustar a legenda
+        for a in ax:
+            leg = a.legend(title='Cluster', title_fontsize='13', fontsize='10', loc='upper left', frameon=True)
+            leg.get_frame().set_facecolor('black')  # Fundo da legenda em preto
+            leg.get_frame().set_edgecolor('white')  # Borda da legenda em branco
+            plt.setp(leg.get_texts(), color='white')  # Define a cor do texto da legenda para branco
+            plt.setp(leg.get_title(), color='white')  # Define a cor do título da legenda para branco
+
+        fig.patch.set_facecolor('black')  # Define o fundo geral da figura para preto
+        plt.tight_layout()
 
         st.pyplot(fig)   
 
